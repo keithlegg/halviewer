@@ -10,6 +10,7 @@ import sys
 import uuid
 import xml.etree.ElementTree as ET
 
+from collections import deque
 from functools import partial
 
 import graphviz
@@ -1348,7 +1349,7 @@ class MainWindow(QMainWindow):
         for pin in self.nodesetup["linecharts"]:
             if pin not in self.pin_graph_data:
                 self.pin_graph_data[pin] = {
-                    "data": [],
+                    "data": deque(maxlen=args.buffer),
                     "min": None,
                     "max": None,
                     "len": args.buffer,
@@ -1357,32 +1358,35 @@ class MainWindow(QMainWindow):
             if pin not in self.nodesetup["linecharts"]:
                 del self.pin_graph_data[pin]
 
-        # get hal data
-        listOfDicts = hal.get_info_pins()
+        # Read only the pins we track — avoids hal.get_info_pins() which
+        # returns every pin in the system (thousands) and can leak native
+        # memory on each call via the C extension module.
+        tracked = {*self.pinsdict, *self.edges, *self.pin_graph_data}
         updates = set()
-        for part in listOfDicts:
-            pinName = part.get("NAME")
-            pinValue = part.get("VALUE")
-            pinType = part.get("TYPE")
-
+        for pinName in tracked:
             try:
-                # pin graph
-                if pinName in self.pin_graph_data:
-                    self.pin_graph_data[pinName]["data"] = [
-                        pinValue,
-                        *self.pin_graph_data[pinName]["data"][: self.pin_graph_data[pin]["len"]],
-                    ]
+                pinValue = hal.get_value(pinName)
             except Exception:
-                pass
+                continue
+
+            pin_info = self.pinsdict.get(pinName, {}).get("pininfo", {})
+            vtype = pin_info.get("vtype", "")
 
             dataColor = Qt.GlobalColor.white
-            if pinType == 1:
+            if vtype == "bit":
                 if pinValue:
                     dataColor = Qt.GlobalColor.green
                 else:
                     dataColor = Qt.GlobalColor.red
-            elif pinType == 2:
+            elif vtype == "s32":
                 pinValue = f"{pinValue:0.3f}"
+
+            if pinName in self.pin_graph_data:
+                try:
+                    self.pin_graph_data[pinName]["data"].appendleft(pinValue)
+                except Exception:
+                    pass
+
             if pinName in self.pinsdict:
                 node_name = self.pinsdict[pinName]["node"]
                 pin_name = self.pinsdict[pinName]["pin"]
