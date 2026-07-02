@@ -1036,22 +1036,24 @@ class MainWindow(QMainWindow):
         if args.file:
             result = open(args.file, "r").read()
         else:
-            result = subprocess.run(["halcmd", "show"], stdout=subprocess.PIPE, check=False).stdout.decode()
+            result = subprocess.run(["halcmd", "-s", "show"], stdout=subprocess.PIPE, check=False).stdout.decode()
 
+        sections = ["Loaded HAL Components", "Component Pins", "Pin Aliases", "Signals", "Parameters", "Parameter Aliases", "Exported Functions", "Realtime Threads"]
         sfilters = []
-        if self.nodesetup["search"]:
-            section = ""
+        search_str = self.nodesetup["search"]
+        if search_str:
+            sections_n = 0
+            section = sections[sections_n]
             for line in result.split("\n"):
-                if line == "Parameters:":
-                    section = "params"
-                elif line == "Component Pins:":
-                    section = "pins"
-                elif not line:
-                    section = ""
-                elif section == "pins" and line.split()[0].isnumeric():
+                if not line:
+                    sections_n += 1
+                    if sections_n >= len(sections):
+                        break
+                    section = sections[sections_n]
+                elif section == "Component Pins":
                     if "=" in line:
                         owner, vtype, direction, value, name, arrow, signal = line.split()
-                        for part in self.nodesetup["search"].split(","):
+                        for part in search_str.split(","):
                             if part.strip() and (part.strip() in name or part.strip() in signal):
                                 sfilters.append(name)
                                 sfilters.append(signal)
@@ -1059,20 +1061,19 @@ class MainWindow(QMainWindow):
 
                     elif self.nodesetup["unconnected"]:
                         owner, vtype, direction, value, name = line.split()
-                        if self.nodesetup["search"]:
-                            for part in self.nodesetup["search"].split(","):
+                        if search_str:
+                            for part in search_str.split(","):
                                 if part.strip() and part.strip() in name:
                                     sfilters.append(name)
-
-        section = ""
+        sections_n = 0
+        section = sections[sections_n]
         for line in result.split("\n"):
-            if line == "Parameters:":
-                section = "params"
-            elif line == "Component Pins:":
-                section = "pins"
-            elif not line:
-                section = ""
-            elif section == "pins" and line.split()[0].isnumeric():
+            if not line:
+                sections_n += 1
+                if sections_n >= len(sections):
+                    break
+                section = sections[sections_n]
+            elif section == "Component Pins":
                 if "=" in line:
                     owner, vtype, direction, value, name, arrow, signal = line.split()
 
@@ -1081,7 +1082,7 @@ class MainWindow(QMainWindow):
                         direction = "I/O"
                         arrow = "==>"
 
-                    if (self.nodesetup["search"] or sfilters) and not name.startswith(tuple(sfilters)) and signal not in sfilters:
+                    if (search_str or sfilters) and not name.startswith(tuple(sfilters)) and signal not in sfilters:
                         continue
 
                     self.pininfo[name] = {
@@ -1111,7 +1112,7 @@ class MainWindow(QMainWindow):
                             self.signals[signal]["source"] = name
                 elif self.nodesetup["unconnected"]:
                     owner, vtype, direction, value, name = line.split()
-                    if (self.nodesetup["search"] or sfilters) and not name.startswith(tuple(sfilters)):
+                    if (search_str or sfilters) and not name.startswith(tuple(sfilters)):
                         continue
 
                     self.pininfo[name] = {
