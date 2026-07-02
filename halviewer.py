@@ -10,7 +10,6 @@ import sys
 import uuid
 import xml.etree.ElementTree as ET
 
-from collections import deque
 from functools import partial
 
 import graphviz
@@ -1349,11 +1348,12 @@ class MainWindow(QMainWindow):
         for pin in self.nodesetup["linecharts"]:
             if pin not in self.pin_graph_data:
                 self.pin_graph_data[pin] = {
-                    "data": deque(maxlen=args.buffer),
+                    "data": [],
                     "min": None,
                     "max": None,
                     "len": args.buffer,
                 }
+
         for pin in list(self.pin_graph_data):
             if pin not in self.nodesetup["linecharts"]:
                 del self.pin_graph_data[pin]
@@ -1369,8 +1369,17 @@ class MainWindow(QMainWindow):
             except Exception:
                 continue
 
-            pin_info = self.pinsdict.get(pinName, {}).get("pininfo", {})
-            vtype = pin_info.get("vtype", "")
+            vtype = self.pinsdict.get(pinName, {}).get("pininfo", {}).get("vtype", "")
+
+            try:
+                # pin graph
+                if pinName in self.pin_graph_data:
+                    self.pin_graph_data[pinName]["data"] = [
+                        pinValue,
+                        *self.pin_graph_data[pinName]["data"][: self.pin_graph_data[pin]["len"]],
+                    ]
+            except Exception:
+                pass
 
             dataColor = Qt.GlobalColor.white
             if vtype == "bit":
@@ -1378,14 +1387,8 @@ class MainWindow(QMainWindow):
                     dataColor = Qt.GlobalColor.green
                 else:
                     dataColor = Qt.GlobalColor.red
-            elif vtype == "s32":
+            elif vtype == "float":
                 pinValue = f"{pinValue:0.3f}"
-
-            if pinName in self.pin_graph_data:
-                try:
-                    self.pin_graph_data[pinName]["data"].appendleft(pinValue)
-                except Exception:
-                    pass
 
             if pinName in self.pinsdict:
                 node_name = self.pinsdict[pinName]["node"]
