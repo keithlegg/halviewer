@@ -67,7 +67,6 @@ else:
     from PyQt6.QtGui import (
         QBrush,
         QColor,
-        QCompleter,
         QFont,
         QKeySequence,
         QMouseEvent,
@@ -79,6 +78,7 @@ else:
     from PyQt6.QtWidgets import (
         QApplication,
         QCheckBox,
+        QCompleter,
         QDialog,
         QDialogButtonBox,
         QGraphicsItem,
@@ -778,6 +778,9 @@ class MainWindow(QMainWindow):
         zoom_out_shortcut = QShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Minus), self)
         zoom_out_shortcut.activated.connect(self.zoom_out)
 
+        zoom_out_shortcut = QShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_Plus), self)
+        zoom_out_shortcut.activated.connect(self.zoom_in)
+
         fit_shortcut = QShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_0), self)
         fit_shortcut.activated.connect(self.fit_view)
 
@@ -1159,7 +1162,7 @@ class MainWindow(QMainWindow):
                 #    continue
                 # if not target_name:
                 #    continue
-                source_name = source.split("=")[0]
+                source_name = source.split("=", 1)[0]
                 eid = source_name.replace(":", ".")
 
                 self.gAll.edge(
@@ -1332,9 +1335,7 @@ class MainWindow(QMainWindow):
                 self.edges[pin].append(edgenode)
         self.writeSetup()
         if hasattr(self, "completer_model"):
-            self.completer_model.setStringList(
-                sorted(set(list(self.nodesdict.keys()) + list(self.pinsdict.keys())))
-            )
+            self.completer_model.setStringList(sorted(set(list(self.nodesdict.keys()) + list(self.pinsdict.keys()))))
 
     def writeSetup(self):
         if args.setup:
