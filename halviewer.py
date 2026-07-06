@@ -16,7 +16,7 @@ import graphviz
 import hal
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--interval", "-i", help="update interval", type=int, default=100)
+parser.add_argument("--interval", "-i", help="update interval (ms)", type=int, default=100)
 parser.add_argument("--buffer", "-b", help="linechart buffer size", type=int, default=50)
 parser.add_argument("--setup", "-s", help="setup file", type=str, default="")
 parser.add_argument("--qt5", "-5", help="using pyqt5", default=False, action="store_true")
