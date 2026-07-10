@@ -501,15 +501,31 @@ class LineCharts(QWidget):
     def resizeEvent(self, event):
         self.width = event.size().width()
 
-    def mouseDoubleClickEvent(self, event):
-        mpos_y = event.pos().y()
+    def wheelEvent(self, event):
+        m_y = event.position().y()
         py = 10
-        gh = 70
-        idx = int((mpos_y - py) // (22 + gh + 5))
-        if idx < len(self.parent.nodesetup["linecharts"]):
-            self.parent.nodesetup["linecharts"].pop(idx)
+        for pin, data in self.data.items():
+            py += 22 + data["height"] + 5
+            if m_y <= py:
+                if event.angleDelta().y() > 0:
+                    data["height"] += 5
+                else:
+                    data["height"] -= 5
+                break
         self.parent.writeSetup()
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event):
+        m_y = event.pos().y()
+        py = 10
+        for pin, data in self.data.items():
+            py += 22 + data["height"] + 5
+            if m_y <= py:
+                self.parent.nodesetup["linecharts"].remove(pin)
+                break
+
         self.parent.check_splitter()
+        self.parent.writeSetup()
 
     def paintEvent(self, event):
         if self.width < 10:
@@ -517,15 +533,19 @@ class LineCharts(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setFont(QFont("Arial", 12))
         painter.setPen(QPen(Qt.GlobalColor.black, 1))
 
         try:
-            gw = self.width - 10
-            gh = 70
+            ox = 60
+            by = 9
+            gbw = self.width - 10
+            gw = gbw - ox
             px = 5
             py = 10
             for pin, data in self.data.items():
+                gbh = data["height"]
+                gh = gbh - (by * 2)
+                painter.setFont(QFont("Arial", 12))
                 painter.setPen(QPen(Qt.GlobalColor.black, 1))
                 if not data["data"]:
                     painter.drawText(QRectF(5, py, gw, 22), Qt.AlignmentFlag.AlignLeft, pin)
@@ -546,21 +566,37 @@ class LineCharts(QWidget):
                         data["max"] = max(data["max"], float(point))
                     vdiff = data["max"] - data["min"]
 
-                    painter.fillRect(QRectF(px, py - 1, gw + 2, gh + 2), Qt.GlobalColor.gray)
-                    painter.setPen(QPen(Qt.GlobalColor.blue, 1))
+                    painter.fillRect(QRectF(px, py, gbw, gbh), QColor("#262626"))
+
+                    painter.setPen(QPen(QColor(255, 255, 255), 1))
+                    painter.drawLine(QPointF(px, py), QPointF(px + gbw, py))
+                    painter.drawLine(QPointF(px, py), QPointF(px, py + gbh))
+
+                    painter.setPen(QPen(QColor(120, 120, 120), 1))
+                    painter.drawLine(QPointF(px + ox, py + by), QPointF(px + ox + gw, py + by))
+                    painter.drawLine(QPointF(px + ox, py + by + gh), QPointF(px + ox + gw, py + by + gh))
+                    painter.drawLine(QPointF(px + ox, py + by), QPointF(px + ox, py + by + gh))
+                    painter.drawLine(QPointF(px + ox, py + by + gh / 2), QPointF(px + ox + gw, py + by + gh / 2))
+
+                    painter.setPen(QPen(QColor(220, 220, 255), 1))
+                    painter.setFont(QFont("Arial", 9))
+                    painter.drawText(QRectF(0, py + by - 10, ox, 20), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignCenter, f"{data['max']:0.1f}")
+                    painter.drawText(QRectF(0, py + by + gh / 2 - 10, ox, 20), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignCenter, f"{data['min'] + vdiff / 2:0.1f}")
+                    painter.drawText(QRectF(0, py + by + gh - 10, ox, 20), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignCenter, f"{data['min']:0.1f}")
 
                     if vdiff != 0:
                         point = data["data"][0]
-                        gy_last = (float(point) - data["min"]) / vdiff * gh
-                        gx_last = gw
+                        gx_last = self.width
+                        gy_last = gh - ((float(point) - data["min"]) / vdiff * gh) + by
                         for gn, point in enumerate(data["data"][1:]):
-                            gy = (float(point) - data["min"]) / vdiff * gh
-                            gx = px + gw - (gn * gw / data["len"])
+                            gx = px + gbw - (gn * gw / data["len"])
+                            gy = gh - ((float(point) - data["min"]) / vdiff * gh) + by
                             painter.drawLine(QPointF(gx_last, py + gy_last), QPointF(gx, py + gy))
-                            gy_last = gy
+                            painter.drawEllipse(QPointF(gx, py + gy), 1, 1)
                             gx_last = gx
+                            gy_last = gy
 
-                py += gh + 5
+                py += gbh + 5
 
             self.height = py + 10
             self.setFixedHeight(self.height)
@@ -646,6 +682,10 @@ class MainWindow(QMainWindow):
             print(f"INFO: savefile is: {args.setup}")
         if args.setup and os.path.isfile(args.setup):
             self.nodesetup = json.loads(open(args.setup, "r").read())
+        if "chartswidth" not in self.nodesetup:
+            self.nodesetup["chartswidth"] = 0
+        if "chartsizes" not in self.nodesetup:
+            self.nodesetup["chartsizes"] = {}
         if "linecharts" not in self.nodesetup:
             self.nodesetup["linecharts"] = []
         if "positions" not in self.nodesetup:
@@ -738,6 +778,8 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.view)
         self.splitter.addWidget(linecharts)
         self.splitter.setSizes([self.geometry().width() - self.charts.width, 0])
+        self.splitter.splitterMoved.connect(self.on_splitter_moved)
+
         vboxMain.addWidget(self.splitter, stretch=1)
         hboxBoxes.addStretch()
         vboxMain.addLayout(hboxBoxes, stretch=0)
@@ -763,9 +805,10 @@ class MainWindow(QMainWindow):
             exit(0)
 
         self.readGraph()
-        self.check_splitter()
         self.show()
+        self.charts.width = self.nodesetup["chartswidth"]
         self.fit_view()
+        self.check_splitter()
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.runTimer)
@@ -986,14 +1029,21 @@ class MainWindow(QMainWindow):
         self.reload()
         self.fit_view()
 
+    def on_splitter_moved(self, pos, index):
+        # sizes = self.sender().sizes()
+        self.nodesetup["chartswidth"] = self.charts.width
+        self.writeSetup()
+
     def check_splitter(self):
         if self.nodesetup["linecharts"]:
             if self.charts.width < 10:
-                self.charts.width = 200
-                self.splitter.setSizes([self.geometry().width() - self.charts.width, self.charts.width])
+                self.charts.width = 300
+            self.splitter.setSizes([self.geometry().width() - self.charts.width, self.charts.width])
+
         elif self.charts.width > 100:
             self.charts.width = 0
             self.splitter.setSizes([self.geometry().width(), 0])
+        self.nodesetup["chartswidth"] = self.charts.width
 
     def toggle_group_graph(self, group):
         if group in self.nodesetup["grouping"]:
@@ -1340,6 +1390,9 @@ class MainWindow(QMainWindow):
 
     def writeSetup(self):
         if args.setup:
+            for pin in self.nodesetup["linecharts"]:
+                if pin in self.pin_graph_data:
+                    self.nodesetup["chartsizes"][pin] = self.pin_graph_data[pin]["height"]
             open(args.setup, "w").write(json.dumps(self.nodesetup, indent=4))
 
     def runTimer(self):
@@ -1348,10 +1401,13 @@ class MainWindow(QMainWindow):
 
         for pin in self.nodesetup["linecharts"]:
             if pin not in self.pin_graph_data:
+                if pin not in self.nodesetup["chartsizes"]:
+                    self.nodesetup["chartsizes"][pin] = 70
                 self.pin_graph_data[pin] = {
                     "data": [],
                     "min": None,
                     "max": None,
+                    "height": self.nodesetup["chartsizes"][pin],
                     "len": args.buffer,
                 }
 
